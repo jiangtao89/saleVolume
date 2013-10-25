@@ -51,8 +51,14 @@ public class SaleVolumeService extends Service {
 	public static final String TIMEOUT = "time_out";
 
 	private static final String SALEVOLUE_MESSAGE_SEND = "com.jt.salevolume.msg_send";
-	
+
 	public static final String SALE_APP_FILE = "/protect_f/sale.data";
+
+	int mCurrentAvalidSim = 1;
+	int mSimId = 0;
+	String mSendMessage = "";
+
+	public boolean mThreadRun = true;
 
 	BroadcastReceiver mReceiver = new BroadcastReceiver() {
 
@@ -66,7 +72,8 @@ public class SaleVolumeService extends Service {
 			} else if (SALEVOLUE_MESSAGE_SEND.equals(action)) {
 				String message = null;
 				boolean error = true;
-				switch (getResultCode()) {
+				int resultCode = getResultCode();
+				switch (resultCode) {
 				case Activity.RESULT_OK:
 					message = "Message sent!";
 					sendMessage(MESSAGE_SEND_SUCCESS);
@@ -88,6 +95,11 @@ public class SaleVolumeService extends Service {
 					break;
 				}
 				Log.e("JT", "message: " + message);
+
+				if (resultCode != Activity.RESULT_OK && mCurrentAvalidSim == 2
+						&& mSimId == 0) {
+					sendMediatekMessage(1); // sim2
+				}
 			}
 		}
 	};
@@ -102,9 +114,11 @@ public class SaleVolumeService extends Service {
 		public void handleMessage(Message msg) {
 			// TODO Auto-generated method stub
 			int message = msg.what;
+			Log.e("JT", "message: " + message);
 			switch (message) {
 			case MESSAGE_TIME_OUT:
-				sendMessageMediatekTimeOut();
+				// sendMessageMediatekTimeOut();
+				showAlertWindow();
 				break;
 
 			case MESSAGE_SEND_SUCCESS:
@@ -112,6 +126,7 @@ public class SaleVolumeService extends Service {
 				break;
 
 			case MESSAGE_STOP:
+				stopForeground(true);
 				stopSelf();
 				break;
 
@@ -127,7 +142,7 @@ public class SaleVolumeService extends Service {
 		// TODO Auto-generated method stub
 		return null;
 	}
-	
+
 	private void parserConfigXml() {
 		Log.e("JT", "parserConfigXml");
 		InputStream is = null;
@@ -174,7 +189,7 @@ public class SaleVolumeService extends Service {
 	public void onCreate() {
 		// TODO Auto-generated method stub
 		super.onCreate();
-		
+
 		// parserConfigXml();
 
 		IntentFilter intentFilter = new IntentFilter();
@@ -186,115 +201,63 @@ public class SaleVolumeService extends Service {
 		notification.flags |= Notification.FLAG_FOREGROUND_SERVICE;
 		startForeground(1001, notification);
 
-		mStartTime = SystemClock.uptimeMillis();
+		mStartTime = SystemClock.elapsedRealtime();
 	}
-	
+
 	public void showAlertWindow() {
-		
-//		Intent intent = new Intent("com.jt.salevolume.ALTER");
-//		startActivity(intent);
+
+		// Intent intent = new Intent("com.jt.salevolume.ALTER");
+		// startActivity(intent);
 
 		AlertDialog.Builder builder = new Builder(this);
 		builder.setIcon(android.R.drawable.ic_dialog_info)
 				.setMessage(R.string.tip_message)
-				/*.setNegativeButton(android.R.string.cancel, new OnClickListener() {
+				/*
+				 * .setNegativeButton(android.R.string.cancel, new
+				 * OnClickListener() {
+				 * 
+				 * @Override public void onClick(DialogInterface dialog, int
+				 * which) { // TODO Auto-generated method stub
+				 * 
+				 * } })
+				 */
+				.setPositiveButton(android.R.string.ok, new OnClickListener() {
 
 					@Override
 					public void onClick(DialogInterface dialog, int which) {
 						// TODO Auto-generated method stub
-						
+						// sendMessageMediatekTimeOut();
+						// sendMessageSuccessfull();
+						getCurrentSimInfo();
+						sendMediatekMessage(mSimId);
 					}
-				})*/
-				.setPositiveButton(android.R.string.ok,
-						new OnClickListener() {
-
-							@Override
-							public void onClick(DialogInterface dialog,
-									int which) {
-								// TODO Auto-generated method stub
-								// sendMessageMediatekTimeOut();
-								sendMessageSuccessfull();
-							}
-						});
+				});
 		AlertDialog dialog = builder.create();
-		dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
+		dialog.getWindow()
+				.setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
 		dialog.show();
 	}
-	
-	private String[] getSimSerialNumber(Context context) {
 
-		TelephonyManager tm = (TelephonyManager) context
-				.getSystemService(Context.TELEPHONY_SERVICE);
-
-		ArrayList<String> list = new ArrayList<String>();
-
-		try {
-			Method getSimSerialNumberGemini = TelephonyManager.class
-					.getDeclaredMethod("getSimSerialNumberGemini",
-							new Class[] { int.class });
-			String serialNumber = null;
-
-			int SIMID = 0;
-			serialNumber = getSimSerialNumberGemini.invoke(tm, SIMID)
-					.toString();
-
-			list.add(serialNumber);
-
-			SIMID = 1;
-			serialNumber = getSimSerialNumberGemini.invoke(tm, SIMID)
-					.toString();
-
-			list.add(serialNumber);
-
-		} catch (NoSuchMethodException e) {
-			// TODO Auto-generated catch block
-
-			e.printStackTrace();
-		} catch (IllegalArgumentException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IllegalAccessException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (InvocationTargetException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-
-		int count = list.size();
-		if (count > 0) {
-			String str[] = new String[count];
-			for (int i = 0; i < count; i++) {
-				str[i] = list.get(i);
-				Log.e("JT", "------getSimSerialNumber index: " + i + " , str: "
-						+ str[i]);
-			}
-			return str;
-		}
-
-		return null;
-	}
-	
-	public void sendMessageMediatekTimeOut() {
+	public void getCurrentSimInfo() {
 		TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
 
-		String message = "";
+		// String message = "";
 		String imei1 = "";
 		String imei2 = "";
 		String serialNumber1 = "";
 		String serialNumber2 = "";
 
-		int id = 0;
+		mSimId = 0;
 
 		try {
 			Method getSimSerialNumberGemini = TelephonyManager.class
 					.getDeclaredMethod("getSimSerialNumberGemini",
 							new Class[] { int.class });
-			
+
 			Method getDeviceIdGemini = TelephonyManager.class
 					.getDeclaredMethod("getDeviceIdGemini",
 							new Class[] { int.class });
-			
+
 			imei1 = (String) getDeviceIdGemini.invoke(tm, 0);
 			imei2 = (String) getDeviceIdGemini.invoke(tm, 1);
 
@@ -317,11 +280,11 @@ public class SaleVolumeService extends Service {
 					sendMessage(MESSAGE_STOP);
 					return;
 				} else {
-					id = 1;
+					mSimId = 1;
 				}
 			}
-			
-			message += "IMEI1: " + imei1 + ", IMEI2: " + imei2;
+
+			mSendMessage += "IMEI1: " + imei1 + ", IMEI2: " + imei2;
 
 		} catch (NoSuchMethodException e1) {
 			// TODO Auto-generated catch block
@@ -337,25 +300,22 @@ public class SaleVolumeService extends Service {
 			e.printStackTrace();
 		}
 
-		// imei = tm.getDeviceId();
-		// if ((imei1 == null || "".equals(imei1))
-		// && (imei2 == null || "".equals(imei2))) {
-		// Log.e("JT", "SendMessage imei is null");
-		// sendMessage(MESSAGE_STOP);
-		// return;
-		// }
+	}
 
-		Log.e("JT", "SendMessage message: " + message);
-		Log.e("JT", "SendMessage id: " + id);
+	public void sendMediatekMessage(int simId) {
+
+		Log.e("JT", "SendMessage message: " + mSendMessage);
+		Log.e("JT", "SendMessage id: " + simId);
+
+		mSimId = simId;
 
 		SmsManagerEx smsManagerEx = SmsManagerEx.getDefault();
-		// SmsManager smsManager = SmsManager.getDefault();
 		Intent intent = new Intent(SALEVOLUE_MESSAGE_SEND);
 		PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0,
 				intent, 0);
 		try {
-			smsManagerEx.sendTextMessage(PHONE_NUMBER, null, message,
-					pendingIntent, null, id);
+			smsManagerEx.sendTextMessage(PHONE_NUMBER, null, mSendMessage,
+					pendingIntent, null, simId);
 		} catch (IllegalArgumentException e) {
 			e.printStackTrace();
 		}
@@ -384,17 +344,16 @@ public class SaleVolumeService extends Service {
 	}
 
 	public void sendMessageSuccessfull() {
-//		mTimeOut = true;
-//		SharedPreferences sp = getSharedPreferences(SALEVOLUME,
-//				Context.MODE_PRIVATE);
-//		SharedPreferences.Editor editor = sp.edit();
-//		editor.putBoolean(TIMEOUT, mTimeOut);
-//		editor.commit();
+		// mTimeOut = true;
+		// SharedPreferences sp = getSharedPreferences(SALEVOLUME,
+		// Context.MODE_PRIVATE);
+		// SharedPreferences.Editor editor = sp.edit();
+		// editor.putBoolean(TIMEOUT, mTimeOut);
+		// editor.commit();
 		File file = new File(SALE_APP_FILE);
-		
-		
+
 		Log.e("JT", "file.getAbsolutePath(): " + file.getAbsolutePath());
-		
+
 		if (!file.exists()) {
 			try {
 				file.createNewFile();
@@ -403,7 +362,7 @@ public class SaleVolumeService extends Service {
 				e.printStackTrace();
 			}
 		}
-		
+
 		try {
 			DataOutputStream Out = new DataOutputStream(
 					new BufferedOutputStream(new FileOutputStream(
@@ -426,32 +385,30 @@ public class SaleVolumeService extends Service {
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// TODO Auto-generated method stub
 
+		mThreadRun = true;
 		parserConfigXml();
-		
-//		Log.e("JT", "onStartCommand");
-//		Log.e("JT", "time: " + MAX_TIME);
-//		Log.e("JT", "phone: " + PHONE_NUMBER);
-		
+
 		Thread thread = new Thread(new Runnable() {
 
 			@Override
 			public void run() {
 				// TODO Auto-generated method stub
-				while (true) {
-					Log.e("JT", "onStartCommand run (SystemClock.uptimeMillis() - mStartTime)/1000: "
-							+ (SystemClock.uptimeMillis() - mStartTime)/1000L);
-					
-					mRunnedTime = (SystemClock.uptimeMillis() - mStartTime)/60000L;
+				while (mThreadRun) {
+					Log.e("JT",
+							"onStartCommand run (SystemClock.elapsedRealtime() - mStartTime)/1000: "
+									+ (SystemClock.elapsedRealtime() - mStartTime)
+									/ 1000L);
 
-					Log.e("JT", "onStartCommand run mStartTime: "
-							+ mRunnedTime);
+					mRunnedTime = (SystemClock.elapsedRealtime() - mStartTime) / 60000L;
+					Log.e("JT", "onStartCommand run mStartTime: " + mRunnedTime);
 					if (mRunnedTime >= MAX_TIME) {
 						sendMessage(MESSAGE_TIME_OUT);
+						mThreadRun = false;
 						break;
 					}
 
 					try {
-						Thread.sleep(3000);
+						Thread.sleep(5000);
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -469,7 +426,7 @@ public class SaleVolumeService extends Service {
 	public void onDestroy() {
 		// TODO Auto-generated method stub
 		super.onDestroy();
-
+		mThreadRun = false;
 		if (mReceiver != null) {
 			unregisterReceiver(mReceiver);
 		}
